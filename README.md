@@ -1,11 +1,14 @@
 # claudesync
 
+[![npm](https://img.shields.io/npm/v/@pinana/claudesync)](https://www.npmjs.com/package/@pinana/claudesync)
+[![licence](https://img.shields.io/npm/l/@pinana/claudesync)](./LICENSE)
+
 Sync your Claude Code config across machines.
 
 ## Quick start
 
 ```bash
-npx claudesync init
+npx @pinana/claudesync init
 ```
 
 The interactive setup imports your existing `~/.claude` config, creates symlinks, and optionally initialises a git repo.
