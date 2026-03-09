@@ -59,7 +59,7 @@ If you prefer not to use Node, the included `setup.sh` handles symlink creation 
 To pull in changes from the upstream template:
 
 ```bash
-git remote add upstream https://github.com/<upstream>/claudesync.git
+git remote add upstream https://github.com/pkaya89/claudesync.git
 git pull upstream main
 ```
 

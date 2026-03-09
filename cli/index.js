@@ -186,8 +186,8 @@ async function status() {
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes}B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}kb`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)}mb`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
 main().catch((err) => {

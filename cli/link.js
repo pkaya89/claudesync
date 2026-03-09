@@ -87,7 +87,7 @@ export function createSymlink(target, link) {
 
 /**
  * Verify all symlinks are correct.
- * Returns array of { item, status: 'ok' | 'missing' | 'wrong' }
+ * Returns array of { item, status: 'ok' | 'missing' | 'wrong' | 'error' }
  */
 export function verifySymlinks(configDir, claudeDir) {
   const map = buildSymlinkMap(configDir, claudeDir);
