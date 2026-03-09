@@ -29,21 +29,40 @@ async function main() {
 
 async function init() {
   // 1. Ask where to store the repo
-  const repoPath = await p.text({
-    message: 'Choose a folder for your config repo (this is a git repo you can push to GitHub)',
-    placeholder: path.join(os.homedir(), 'claudesync'),
-    defaultValue: path.join(os.homedir(), 'claudesync'),
-    validate: (value) => {
-      if (!value) return 'Path is required';
-    },
+  const cwd = process.cwd();
+  const homeOption = path.join(os.homedir(), 'claudesync');
+
+  const pathChoice = await p.select({
+    message: 'Where should your config repo live? (a git repo you can push to GitHub)',
+    options: [
+      { value: cwd, label: `Current directory (${cwd})` },
+      { value: homeOption, label: `Home directory (${homeOption})` },
+      { value: 'custom', label: 'Choose a different path' },
+    ],
   });
 
-  if (p.isCancel(repoPath)) {
+  if (p.isCancel(pathChoice)) {
     p.cancel('Setup cancelled.');
     process.exit(0);
   }
 
-  const resolvedPath = repoPath.replace(/^~/, os.homedir());
+  let resolvedPath = pathChoice;
+
+  if (pathChoice === 'custom') {
+    const customPath = await p.text({
+      message: 'Enter the path:',
+      validate: (value) => {
+        if (!value) return 'Path is required';
+      },
+    });
+
+    if (p.isCancel(customPath)) {
+      p.cancel('Setup cancelled.');
+      process.exit(0);
+    }
+
+    resolvedPath = customPath.replace(/^~/, os.homedir());
+  }
   const configDir = path.join(resolvedPath, 'config');
 
   // 2. Detect existing config
