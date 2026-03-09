@@ -1,6 +1,6 @@
 {
   "name": "@pinana/claudesync",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Sync your Claude Code config across machines. Dotfiles for Claude.",
   "type": "module",
   "bin": {
@@ -15,7 +15,13 @@
   "scripts": {
     "test": "node --test tests/*.test.js"
   },
-  "keywords": ["claude", "claude-code", "dotfiles", "sync", "config"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "dotfiles",
+    "sync",
+    "config"
+  ],
   "license": "MIT",
   "author": "Pinar Kaya",
   "repository": {
