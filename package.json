@@ -1,6 +1,6 @@
 {
   "name": "@pinana/claudesync",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Sync your Claude Code config across machines. Dotfiles for Claude.",
   "type": "module",
   "bin": {
