@@ -29,14 +29,14 @@ async function main() {
 
 async function init() {
   // 1. Ask where to store the repo
-  const cwd = process.cwd();
+  const cwdOption = path.join(process.cwd(), 'claudesync');
   const homeOption = path.join(os.homedir(), 'claudesync');
 
   const pathChoice = await p.select({
     message: 'Where should your config repo live? (a git repo you can push to GitHub)',
     options: [
-      { value: cwd, label: `Current directory (${cwd})` },
-      { value: homeOption, label: `Home directory (${homeOption})` },
+      { value: cwdOption, label: `Here (${cwdOption})` },
+      { value: homeOption, label: `Home (${homeOption})` },
       { value: 'custom', label: 'Choose a different path' },
     ],
   });
