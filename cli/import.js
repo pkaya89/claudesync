@@ -49,16 +49,19 @@ export function importConfig(claudeDir, configDir, items) {
     const src = path.join(claudeDir, item);
     const dest = path.join(configDir, item);
 
-    if (!fs.existsSync(src)) continue;
+    // Skip if source is a symlink pointing to dest (already synced)
+    const srcStat = fs.lstatSync(src, { throwIfNoEntry: false });
+    if (!srcStat) continue;
+    if (srcStat.isSymbolicLink() && fs.readlinkSync(src) === dest) continue;
 
     // Remove existing destination (may be a symlink from a previous run)
-    if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+    const destStat = fs.lstatSync(dest, { throwIfNoEntry: false });
+    if (destStat) {
       fs.rmSync(dest, { recursive: true, force: true });
     }
 
-    const stat = fs.statSync(src);
-    if (stat.isDirectory()) {
-      fs.cpSync(src, dest, { recursive: true });
+    if (srcStat.isDirectory()) {
+      fs.cpSync(src, dest, { recursive: true, dereference: true });
     } else {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(src, dest);
@@ -81,19 +84,22 @@ export function importProjects(claudeDir, configDir) {
 
     if (fs.existsSync(memSrc)) {
       const dest = path.join(configDir, 'projects', slug, 'memory');
-      if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
-        fs.rmSync(dest, { recursive: true, force: true });
-      }
+      const memStat = fs.lstatSync(memSrc, { throwIfNoEntry: false });
+      // Skip if source is a symlink pointing to dest (already synced)
+      if (memStat?.isSymbolicLink() && fs.readlinkSync(memSrc) === dest) continue;
+      const destStat = fs.lstatSync(dest, { throwIfNoEntry: false });
+      if (destStat) fs.rmSync(dest, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.cpSync(memSrc, dest, { recursive: true });
+      fs.cpSync(memSrc, dest, { recursive: true, dereference: true });
       imported.push(`projects/${slug}/memory`);
     }
 
     if (fs.existsSync(mdSrc)) {
       const dest = path.join(configDir, 'projects', slug, 'CLAUDE.md');
-      if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
-        fs.rmSync(dest, { recursive: true, force: true });
-      }
+      const mdStat = fs.lstatSync(mdSrc, { throwIfNoEntry: false });
+      if (mdStat?.isSymbolicLink() && fs.readlinkSync(mdSrc) === dest) continue;
+      const destStat = fs.lstatSync(dest, { throwIfNoEntry: false });
+      if (destStat) fs.rmSync(dest, { recursive: true, force: true });
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(mdSrc, dest);
       imported.push(`projects/${slug}/CLAUDE.md`);

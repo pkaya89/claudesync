@@ -11,6 +11,7 @@ describe('e2e: full import and symlink flow', () => {
   let fakeClaudeDir;
   let repoDir;
   let configDir;
+  let backupDir;
 
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claudesync-e2e-'));
@@ -41,8 +42,9 @@ describe('e2e: full import and symlink flow', () => {
     fs.writeFileSync(path.join(fakeClaudeDir, 'history.jsonl'), '{}');
     fs.mkdirSync(path.join(fakeClaudeDir, 'cache'), { recursive: true });
 
-    // Create repo directory
+    // Create repo and backup directories
     fs.mkdirSync(configDir, { recursive: true });
+    backupDir = path.join(repoDir, 'backups');
   });
 
   after(() => {
@@ -92,7 +94,7 @@ describe('e2e: full import and symlink flow', () => {
     assert.ok(symlinkMap.length > 0, 'Should have symlinks to create');
 
     for (const { target, link } of symlinkMap) {
-      const result = createSymlink(target, link);
+      const result = createSymlink(target, link, backupDir);
       assert.ok(result.status === 'created' || result.status === 'skipped',
         `Symlink for ${path.basename(link)} should be created or skipped`);
     }

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { detectConfig, importConfig, importProjects } from './import.js';
-import { buildSymlinkMap, createSymlink, removeSymlinks, restoreBackups, verifySymlinks } from './link.js';
+import { buildSymlinkMap, createSymlink, hasBackups, removeSymlinks, restoreBackups, verifySymlinks } from './link.js';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 
@@ -32,36 +32,36 @@ async function init() {
   const cwdOption = path.join(process.cwd(), 'claudesync');
   const homeOption = path.join(os.homedir(), 'claudesync');
 
-  const pathChoice = await p.select({
-    message: 'Where should your config repo live? (a git repo you can push to GitHub)',
-    options: [
-      { value: cwdOption, label: `Here (${cwdOption})` },
-      { value: homeOption, label: `Home (${homeOption})` },
-      { value: 'custom', label: 'Choose a different path' },
-    ],
-  });
-
-  if (p.isCancel(pathChoice)) {
-    p.cancel('Setup cancelled.');
-    process.exit(0);
-  }
-
-  let resolvedPath = pathChoice;
-
-  if (pathChoice === 'custom') {
-    const customPath = await p.text({
-      message: 'Enter the path:',
-      validate: (value) => {
-        if (!value) return 'Path is required';
-      },
+  let resolvedPath;
+  while (!resolvedPath) {
+    const pathChoice = await p.select({
+      message: 'Where should your config repo live? (a git repo you can push to GitHub)',
+      options: [
+        { value: cwdOption, label: `Here (${cwdOption})` },
+        { value: homeOption, label: `Home (${homeOption})` },
+        { value: 'custom', label: 'Choose a different path' },
+      ],
     });
 
-    if (p.isCancel(customPath)) {
+    if (p.isCancel(pathChoice)) {
       p.cancel('Setup cancelled.');
       process.exit(0);
     }
 
-    resolvedPath = customPath.replace(/^~/, os.homedir());
+    if (pathChoice !== 'custom') {
+      resolvedPath = pathChoice;
+    } else {
+      const customPath = await p.text({
+        message: 'Enter the path (esc to go back):',
+        validate: (value) => {
+          if (!value) return 'Path is required';
+        },
+      });
+
+      if (!p.isCancel(customPath)) {
+        resolvedPath = customPath.replace(/^~/, os.homedir());
+      }
+    }
   }
   const configDir = path.join(resolvedPath, 'config');
 
@@ -141,12 +141,13 @@ async function init() {
   }
 
   // 3. Create symlinks
+  const backupDir = path.join(resolvedPath, 'backups');
   const s = p.spinner();
   s.start('Creating symlinks');
   const symlinkMap = buildSymlinkMap(configDir, CLAUDE_DIR);
   const results = [];
   for (const { target, link } of symlinkMap) {
-    const result = createSymlink(target, link);
+    const result = createSymlink(target, link, backupDir);
     results.push({ ...result, name: path.relative(configDir, target) });
   }
   s.stop('Symlinks created');
@@ -218,17 +219,42 @@ async function uninstall() {
     }
   }
 
-  const hasBackups = results.some(r => r.hasBackup);
-  if (hasBackups) {
+  const backupDir = path.join(process.cwd(), 'backups');
+  if (hasBackups(backupDir)) {
     const shouldRestore = await p.confirm({
-      message: 'Backups from before claudesync were found. Restore them?',
+      message: 'Backups from before claudesync were found. Restore them to ~/.claude?',
       initialValue: true,
     });
 
     if (!p.isCancel(shouldRestore) && shouldRestore) {
-      const restored = restoreBackups(configDir, CLAUDE_DIR);
+      const restored = restoreBackups(backupDir, CLAUDE_DIR);
       for (const name of restored) {
         p.log.success(`${name} (backup restored)`);
+      }
+    }
+  } else {
+    // No backups - copy config files back to ~/.claude so the user isn't left with nothing
+    const removed = results.filter(r => r.status === 'removed');
+    if (removed.length > 0) {
+      const shouldCopy = await p.confirm({
+        message: 'Copy your config files back to ~/.claude? (otherwise ~/.claude will be empty)',
+        initialValue: true,
+      });
+
+      if (!p.isCancel(shouldCopy) && shouldCopy) {
+        const symlinkMap = buildSymlinkMap(configDir, CLAUDE_DIR);
+        for (const { target, link } of symlinkMap) {
+          if (!fs.existsSync(link) && fs.existsSync(target)) {
+            fs.mkdirSync(path.dirname(link), { recursive: true });
+            const stat = fs.lstatSync(target);
+            if (stat.isDirectory()) {
+              fs.cpSync(target, link, { recursive: true });
+            } else {
+              fs.copyFileSync(target, link);
+            }
+            p.log.success(`${path.relative(configDir, target)} (copied back)`);
+          }
+        }
       }
     }
   }

@@ -10,10 +10,13 @@ describe('createSymlink', () => {
   let claudeDir;
   let configDir;
 
+  let backupDir;
+
   before(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'claudesync-test-'));
     claudeDir = path.join(tmpDir, '.claude');
     configDir = path.join(tmpDir, 'config');
+    backupDir = path.join(tmpDir, 'backups');
     fs.mkdirSync(claudeDir, { recursive: true });
     fs.mkdirSync(configDir, { recursive: true });
   });
@@ -27,7 +30,7 @@ describe('createSymlink', () => {
     const link = path.join(claudeDir, 'CLAUDE.md');
     fs.writeFileSync(target, '# Test');
 
-    const result = createSymlink(target, link);
+    const result = createSymlink(target, link, backupDir);
 
     assert.equal(result.status, 'created');
     assert.equal(fs.readlinkSync(link), target);
@@ -39,7 +42,7 @@ describe('createSymlink', () => {
     fs.writeFileSync(target, '{}');
     fs.symlinkSync(target, link);
 
-    const result = createSymlink(target, link);
+    const result = createSymlink(target, link, backupDir);
 
     assert.equal(result.status, 'skipped');
   });
@@ -50,7 +53,7 @@ describe('createSymlink', () => {
     fs.writeFileSync(target, '# New');
     fs.writeFileSync(link, '# Old content');
 
-    const result = createSymlink(target, link);
+    const result = createSymlink(target, link, backupDir);
 
     assert.equal(result.status, 'created');
     assert.equal(result.backedUp, true);
@@ -63,7 +66,7 @@ describe('createSymlink', () => {
     fs.mkdirSync(path.join(configDir, 'deep'), { recursive: true });
     fs.writeFileSync(target, '# Deep');
 
-    const result = createSymlink(target, link);
+    const result = createSymlink(target, link, backupDir);
 
     assert.equal(result.status, 'created');
     assert.equal(fs.readlinkSync(link), target);

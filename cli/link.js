@@ -54,10 +54,10 @@ export function buildSymlinkMap(configDir, claudeDir) {
 }
 
 /**
- * Create a single symlink. Backs up existing files.
+ * Create a single symlink. Backs up existing files to a central backup dir.
  * Returns { status: 'created' | 'skipped', backedUp: boolean, backupPath?: string }
  */
-export function createSymlink(target, link) {
+export function createSymlink(target, link, backupDir) {
   // Already correct?
   if (fs.lstatSync(link, { throwIfNoEntry: false })?.isSymbolicLink()) {
     if (fs.readlinkSync(link) === target) {
@@ -66,19 +66,32 @@ export function createSymlink(target, link) {
     // Symlink exists but points to wrong target; fall through to backup & re-create
   }
 
+  // Verify the target exists before replacing anything
+  if (!fs.existsSync(target)) {
+    return { status: 'skipped', backedUp: false };
+  }
+
   // Ensure parent dir exists
   fs.mkdirSync(path.dirname(link), { recursive: true });
 
   let backedUp = false;
   let backupPath;
 
-  // Back up existing file/dir/symlink
+  // Back up existing file/dir/symlink to central backup dir
   const existing = fs.lstatSync(link, { throwIfNoEntry: false });
-  if (existing) {
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    backupPath = `${link}.backup-${timestamp}`;
+  if (existing && !existing.isSymbolicLink()) {
+    const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
+    const claudeDir = path.dirname(link).includes('.claude')
+      ? link.slice(0, link.indexOf('.claude') + '.claude'.length)
+      : path.dirname(link);
+    const relativeName = path.relative(claudeDir, link).replaceAll('/', '--');
+    backupPath = path.join(backupDir, `${relativeName}.backup-${timestamp}`);
+    fs.mkdirSync(backupDir, { recursive: true });
     fs.renameSync(link, backupPath);
     backedUp = true;
+  } else if (existing) {
+    // Remove existing symlink (no need to back up symlinks)
+    fs.unlinkSync(link);
   }
 
   fs.symlinkSync(target, link);
@@ -87,7 +100,7 @@ export function createSymlink(target, link) {
 
 /**
  * Remove symlinks that point back to the config dir.
- * Returns array of { item, status: 'removed' | 'skipped', hasBackup: boolean }
+ * Returns array of { item, status: 'removed' | 'skipped' }
  */
 export function removeSymlinks(configDir, claudeDir) {
   const map = buildSymlinkMap(configDir, claudeDir);
@@ -96,38 +109,40 @@ export function removeSymlinks(configDir, claudeDir) {
     const stat = fs.lstatSync(link, { throwIfNoEntry: false });
 
     if (!stat?.isSymbolicLink() || fs.readlinkSync(link) !== target) {
-      return { item: name, status: 'skipped', hasBackup: false };
+      return { item: name, status: 'skipped' };
     }
 
     fs.unlinkSync(link);
-
-    const dir = path.dirname(link);
-    const base = path.basename(link);
-    const hasBackup = fs.readdirSync(dir).some(f => f.startsWith(`${base}.backup-`));
-
-    return { item: name, status: 'removed', hasBackup };
+    return { item: name, status: 'removed' };
   });
 }
 
 /**
- * Restore the most recent backup for each removed symlink.
+ * Check if backups exist in the central backup dir.
  */
-export function restoreBackups(configDir, claudeDir) {
-  const map = buildSymlinkMap(configDir, claudeDir);
+export function hasBackups(backupDir) {
+  if (!fs.existsSync(backupDir)) return false;
+  return fs.readdirSync(backupDir).some(f => f.includes('.backup-'));
+}
+
+/**
+ * Restore backups from the central backup dir to ~/.claude.
+ */
+export function restoreBackups(backupDir, claudeDir) {
+  if (!fs.existsSync(backupDir)) return [];
+
   const restored = [];
+  const files = fs.readdirSync(backupDir).filter(f => f.includes('.backup-'));
 
-  for (const { target, link } of map) {
-    const name = path.relative(configDir, target);
-    const dir = path.dirname(link);
-    const base = path.basename(link);
-    const backups = fs.readdirSync(dir)
-      .filter(f => f.startsWith(`${base}.backup-`))
-      .sort()
-      .reverse();
+  for (const file of files) {
+    const flatName = file.replace(/\.backup-.*$/, '');
+    const relativePath = flatName.replaceAll('--', path.sep);
+    const dest = path.join(claudeDir, relativePath);
 
-    if (backups.length > 0 && !fs.existsSync(link)) {
-      fs.renameSync(path.join(dir, backups[0]), link);
-      restored.push(name);
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.renameSync(path.join(backupDir, file), dest);
+      restored.push(relativePath);
     }
   }
 
