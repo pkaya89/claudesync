@@ -86,6 +86,55 @@ export function createSymlink(target, link) {
 }
 
 /**
+ * Remove symlinks that point back to the config dir.
+ * Returns array of { item, status: 'removed' | 'skipped', hasBackup: boolean }
+ */
+export function removeSymlinks(configDir, claudeDir) {
+  const map = buildSymlinkMap(configDir, claudeDir);
+  return map.map(({ target, link }) => {
+    const name = path.relative(configDir, target);
+    const stat = fs.lstatSync(link, { throwIfNoEntry: false });
+
+    if (!stat?.isSymbolicLink() || fs.readlinkSync(link) !== target) {
+      return { item: name, status: 'skipped', hasBackup: false };
+    }
+
+    fs.unlinkSync(link);
+
+    const dir = path.dirname(link);
+    const base = path.basename(link);
+    const hasBackup = fs.readdirSync(dir).some(f => f.startsWith(`${base}.backup-`));
+
+    return { item: name, status: 'removed', hasBackup };
+  });
+}
+
+/**
+ * Restore the most recent backup for each removed symlink.
+ */
+export function restoreBackups(configDir, claudeDir) {
+  const map = buildSymlinkMap(configDir, claudeDir);
+  const restored = [];
+
+  for (const { target, link } of map) {
+    const name = path.relative(configDir, target);
+    const dir = path.dirname(link);
+    const base = path.basename(link);
+    const backups = fs.readdirSync(dir)
+      .filter(f => f.startsWith(`${base}.backup-`))
+      .sort()
+      .reverse();
+
+    if (backups.length > 0 && !fs.existsSync(link)) {
+      fs.renameSync(path.join(dir, backups[0]), link);
+      restored.push(name);
+    }
+  }
+
+  return restored;
+}
+
+/**
  * Verify all symlinks are correct.
  * Returns array of { item, status: 'ok' | 'missing' | 'wrong' | 'error' }
  */

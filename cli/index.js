@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { detectConfig, importConfig, importProjects } from './import.js';
-import { buildSymlinkMap, createSymlink, verifySymlinks } from './link.js';
+import { buildSymlinkMap, createSymlink, removeSymlinks, restoreBackups, verifySymlinks } from './link.js';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
 
@@ -18,9 +18,11 @@ async function main() {
     await init();
   } else if (command === 'status') {
     await status();
+  } else if (command === 'uninstall') {
+    await uninstall();
   } else {
     p.log.error(`Unknown command: ${command}`);
-    p.log.info('Usage: claudesync init | claudesync status');
+    p.log.info('Usage: claudesync init | status | uninstall');
     process.exit(1);
   }
 }
@@ -168,6 +170,51 @@ async function status() {
   }
 
   p.outro('');
+}
+
+async function uninstall() {
+  const configDir = path.join(process.cwd(), 'config');
+  if (!fs.existsSync(configDir)) {
+    p.log.error('No config/ directory found. Are you in a claudesync repo?');
+    process.exit(1);
+  }
+
+  const confirm = await p.confirm({
+    message: 'Remove all symlinks from ~/.claude? (your config files in this repo are kept)',
+    initialValue: false,
+  });
+
+  if (p.isCancel(confirm) || !confirm) {
+    p.cancel('Uninstall cancelled.');
+    process.exit(0);
+  }
+
+  const results = removeSymlinks(configDir, CLAUDE_DIR);
+
+  for (const r of results) {
+    if (r.status === 'removed') {
+      p.log.success(`${r.item} (removed)`);
+    } else {
+      p.log.info(`${r.item} (skipped - not a claudesync symlink)`);
+    }
+  }
+
+  const hasBackups = results.some(r => r.hasBackup);
+  if (hasBackups) {
+    const shouldRestore = await p.confirm({
+      message: 'Backups from before claudesync were found. Restore them?',
+      initialValue: true,
+    });
+
+    if (!p.isCancel(shouldRestore) && shouldRestore) {
+      const restored = restoreBackups(configDir, CLAUDE_DIR);
+      for (const name of restored) {
+        p.log.success(`${name} (backup restored)`);
+      }
+    }
+  }
+
+  p.outro('Symlinks removed. Your config repo is untouched.');
 }
 
 function formatSize(bytes) {
