@@ -4,7 +4,6 @@ import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { execSync } from 'node:child_process';
 import { detectConfig, importConfig, importProjects } from './import.js';
 import { buildSymlinkMap, createSymlink, verifySymlinks } from './link.js';
 
@@ -29,7 +28,7 @@ async function main() {
 async function init() {
   // 1. Ask where to store the repo
   const repoPath = await p.text({
-    message: 'Where should we store your config repo?',
+    message: 'Choose a folder for your config repo (this is a git repo you can push to GitHub)',
     placeholder: path.join(os.homedir(), 'claudesync'),
     defaultValue: path.join(os.homedir(), 'claudesync'),
     validate: (value) => {
@@ -85,7 +84,7 @@ async function init() {
         s.stop('Config imported');
       } else if (importChoice === 'choose') {
         const selected = await p.multiselect({
-          message: 'Select items to import:',
+          message: 'Select items to import (space to toggle, enter to confirm):',
           options: found.map(item => ({
             value: item.name,
             label: item.type === 'directory'
@@ -141,25 +140,12 @@ async function init() {
     }
   }
 
-  // 4. Git init
-  const shouldGitInit = await p.confirm({
-    message: 'Initialise git repo and create first commit?',
-    initialValue: true,
-  });
-
-  if (!p.isCancel(shouldGitInit) && shouldGitInit) {
-    execSync('git init', { cwd: resolvedPath, stdio: 'ignore' });
-    execSync('git add -A', { cwd: resolvedPath, stdio: 'ignore' });
-    execSync('git commit -m "Initial claudesync config"', { cwd: resolvedPath, stdio: 'ignore' });
-    p.log.success('Git repo initialised with first commit');
-  }
-
   p.note(
-    `cd ${resolvedPath}\ngit remote add origin <your-repo-url>\ngit push -u origin main`,
+    `cd ${resolvedPath}\ngit init && git add -A && git commit -m "Initial config"\ngit remote add origin <your-repo-url>\ngit push -u origin main`,
     'Next steps'
   );
 
-  p.outro('Your Claude Code config is now version-controlled.');
+  p.outro('Done! Your config is symlinked and ready to version-control.');
 }
 
 async function status() {

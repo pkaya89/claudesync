@@ -51,6 +51,11 @@ export function importConfig(claudeDir, configDir, items) {
 
     if (!fs.existsSync(src)) continue;
 
+    // Remove existing destination (may be a symlink from a previous run)
+    if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      fs.rmSync(dest, { recursive: true, force: true });
+    }
+
     const stat = fs.statSync(src);
     if (stat.isDirectory()) {
       fs.cpSync(src, dest, { recursive: true });
@@ -76,12 +81,19 @@ export function importProjects(claudeDir, configDir) {
 
     if (fs.existsSync(memSrc)) {
       const dest = path.join(configDir, 'projects', slug, 'memory');
+      if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        fs.rmSync(dest, { recursive: true, force: true });
+      }
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.cpSync(memSrc, dest, { recursive: true });
       imported.push(`projects/${slug}/memory`);
     }
 
     if (fs.existsSync(mdSrc)) {
       const dest = path.join(configDir, 'projects', slug, 'CLAUDE.md');
+      if (fs.existsSync(dest) || fs.lstatSync(dest, { throwIfNoEntry: false })?.isSymbolicLink()) {
+        fs.rmSync(dest, { recursive: true, force: true });
+      }
       fs.mkdirSync(path.dirname(dest), { recursive: true });
       fs.copyFileSync(mdSrc, dest);
       imported.push(`projects/${slug}/CLAUDE.md`);
