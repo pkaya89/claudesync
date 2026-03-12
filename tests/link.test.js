@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createSymlink, verifySymlinks, buildSymlinkMap, SYMLINK_ITEMS } from '../cli/link.js';
+import { createSymlink, verifySymlinks, buildSymlinkMap, SYMLINK_ITEMS, SYMLINK_PLUGIN_ITEMS } from '../cli/link.js';
 
 describe('createSymlink', () => {
   let tmpDir;
@@ -70,5 +70,21 @@ describe('createSymlink', () => {
 
     assert.equal(result.status, 'created');
     assert.equal(fs.readlinkSync(link), target);
+  });
+
+  it('SYMLINK_ITEMS includes rules and keybindings.json but not hooks', () => {
+    assert.ok(SYMLINK_ITEMS.includes('rules'));
+    assert.ok(SYMLINK_ITEMS.includes('keybindings.json'));
+    assert.ok(!SYMLINK_ITEMS.includes('hooks'));
+  });
+
+  it('builds symlink map including plugin config files', () => {
+    fs.mkdirSync(path.join(configDir, 'plugins'), { recursive: true });
+    fs.writeFileSync(path.join(configDir, 'plugins', 'installed_plugins.json'), '[]');
+
+    const map = buildSymlinkMap(configDir, claudeDir);
+    const pluginLinks = map.filter(m => m.target.includes('plugins'));
+    assert.ok(pluginLinks.length > 0, 'Should include plugin config symlinks');
+    assert.ok(pluginLinks[0].link.includes(path.join('.claude', 'plugins')));
   });
 });

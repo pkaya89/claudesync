@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { detectConfig, importConfig, IMPORTABLE_ITEMS } from '../cli/import.js';
+import { detectConfig, importConfig, importPluginConfig, IMPORTABLE_ITEMS } from '../cli/import.js';
 
 describe('detectConfig', () => {
   let tmpDir;
@@ -42,6 +42,34 @@ describe('detectConfig', () => {
     fs.writeFileSync(path.join(claudeDir, '.credentials.json'), '{}');
     const found = detectConfig(claudeDir);
     assert.ok(!found.some(f => f.name === '.credentials.json'));
+  });
+
+  it('detects keybindings.json when present', () => {
+    fs.writeFileSync(path.join(claudeDir, 'keybindings.json'), '{}');
+    const found = detectConfig(claudeDir);
+    assert.ok(found.some(f => f.name === 'keybindings.json'));
+  });
+
+  it('detects rules/ directory when present', () => {
+    fs.mkdirSync(path.join(claudeDir, 'rules'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'rules', 'code-style.md'), '# Style');
+    const found = detectConfig(claudeDir);
+    assert.ok(found.some(f => f.name === 'rules'));
+  });
+
+  it('detects plugin config files when present', () => {
+    fs.mkdirSync(path.join(claudeDir, 'plugins'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'plugins', 'installed_plugins.json'), '[]');
+    fs.writeFileSync(path.join(claudeDir, 'plugins', 'blocklist.json'), '{}');
+    const found = detectConfig(claudeDir);
+    assert.ok(found.some(f => f.name === 'plugins (config)'));
+  });
+
+  it('does not detect hooks/ (not a real directory)', () => {
+    fs.mkdirSync(path.join(claudeDir, 'hooks'), { recursive: true });
+    fs.writeFileSync(path.join(claudeDir, 'hooks', 'pre-commit.sh'), '#!/bin/bash');
+    const found = detectConfig(claudeDir);
+    assert.ok(!found.some(f => f.name === 'hooks'), 'Should not detect hooks/');
   });
 });
 

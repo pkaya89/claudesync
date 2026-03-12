@@ -4,10 +4,17 @@ import path from 'node:path';
 export const IMPORTABLE_ITEMS = [
   'CLAUDE.md',
   'settings.json',
+  'keybindings.json',
   'agents',
   'commands',
-  'hooks',
   'skills',
+  'rules',
+];
+
+export const IMPORTABLE_PLUGIN_ITEMS = [
+  'plugins/installed_plugins.json',
+  'plugins/known_marketplaces.json',
+  'plugins/blocklist.json',
 ];
 
 export function detectConfig(claudeDir) {
@@ -41,6 +48,17 @@ export function detectConfig(claudeDir) {
     }
   }
 
+  const pluginItems = [];
+  for (const item of IMPORTABLE_PLUGIN_ITEMS) {
+    const fullPath = path.join(claudeDir, item);
+    if (!fs.existsSync(fullPath)) continue;
+    const stat = fs.statSync(fullPath);
+    pluginItems.push({ name: item, type: 'file', size: stat.size });
+  }
+  if (pluginItems.length > 0) {
+    found.push({ name: 'plugins (config)', type: 'group', items: pluginItems });
+  }
+
   return found;
 }
 
@@ -67,6 +85,26 @@ export function importConfig(claudeDir, configDir, items) {
       fs.copyFileSync(src, dest);
     }
   }
+}
+
+export function importPluginConfig(claudeDir, configDir) {
+  const imported = [];
+  for (const item of IMPORTABLE_PLUGIN_ITEMS) {
+    const src = path.join(claudeDir, item);
+    const dest = path.join(configDir, item);
+
+    const srcStat = fs.lstatSync(src, { throwIfNoEntry: false });
+    if (!srcStat) continue;
+    if (srcStat.isSymbolicLink() && fs.readlinkSync(src) === dest) continue;
+
+    const destStat = fs.lstatSync(dest, { throwIfNoEntry: false });
+    if (destStat) fs.rmSync(dest, { force: true });
+
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    imported.push(item);
+  }
+  return imported;
 }
 
 export function importProjects(claudeDir, configDir) {

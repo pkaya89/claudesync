@@ -5,10 +5,17 @@ import path from 'node:path';
 export const SYMLINK_ITEMS = [
   'CLAUDE.md',
   'settings.json',
+  'keybindings.json',
   'agents',
   'commands',
-  'hooks',
   'skills',
+  'rules',
+];
+
+export const SYMLINK_PLUGIN_ITEMS = [
+  'plugins/installed_plugins.json',
+  'plugins/known_marketplaces.json',
+  'plugins/blocklist.json',
 ];
 
 /**
@@ -19,6 +26,14 @@ export function buildSymlinkMap(configDir, claudeDir) {
   const map = [];
 
   for (const item of SYMLINK_ITEMS) {
+    const target = path.join(configDir, item);
+    if (fs.existsSync(target)) {
+      map.push({ target, link: path.join(claudeDir, item) });
+    }
+  }
+
+  // Plugin config files (individual symlinks, not the whole plugins/ dir)
+  for (const item of SYMLINK_PLUGIN_ITEMS) {
     const target = path.join(configDir, item);
     if (fs.existsSync(target)) {
       map.push({ target, link: path.join(claudeDir, item) });

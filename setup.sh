@@ -63,13 +63,25 @@ import_config() {
     info "Importing existing config from $CLAUDE_DIR..."
     mkdir -p "$CONFIG_DIR"
 
-    local items=("CLAUDE.md" "settings.json" "agents" "commands" "hooks" "skills")
+    local items=("CLAUDE.md" "settings.json" "keybindings.json" "agents" "commands" "skills" "rules")
     for item in "${items[@]}"; do
         local src="$CLAUDE_DIR/$item"
         local dest="$CONFIG_DIR/$item"
         if [ -e "$src" ] && [ ! -L "$src" ]; then
             cp -r "$src" "$dest"
             success "Imported $item"
+        fi
+    done
+
+    # Plugin config files
+    local plugin_items=("installed_plugins.json" "known_marketplaces.json" "blocklist.json")
+    for item in "${plugin_items[@]}"; do
+        local src="$CLAUDE_DIR/plugins/$item"
+        local dest="$CONFIG_DIR/plugins/$item"
+        if [ -e "$src" ] && [ ! -L "$src" ]; then
+            mkdir -p "$CONFIG_DIR/plugins"
+            cp "$src" "$dest"
+            success "Imported plugins/$item"
         fi
     done
 
@@ -122,10 +134,20 @@ fi
 info "Creating symlinks..."
 
 # Top-level items
-for item in CLAUDE.md settings.json agents commands hooks skills; do
+for item in CLAUDE.md settings.json keybindings.json agents commands skills rules; do
     target="$CONFIG_DIR/$item"
     link="$CLAUDE_DIR/$item"
     [ -e "$target" ] && create_symlink "$target" "$link"
+done
+
+# Plugin config file symlinks
+for item in installed_plugins.json known_marketplaces.json blocklist.json; do
+    target="$CONFIG_DIR/plugins/$item"
+    link="$CLAUDE_DIR/plugins/$item"
+    if [ -e "$target" ]; then
+        mkdir -p "$CLAUDE_DIR/plugins"
+        create_symlink "$target" "$link"
+    fi
 done
 
 # Per-project items

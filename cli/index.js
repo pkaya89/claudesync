@@ -4,7 +4,7 @@ import * as p from '@clack/prompts';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { detectConfig, importConfig, importProjects } from './import.js';
+import { detectConfig, importConfig, importProjects, importPluginConfig } from './import.js';
 import { buildSymlinkMap, createSymlink, hasBackups, removeSymlinks, restoreBackups, verifySymlinks } from './link.js';
 
 const CLAUDE_DIR = path.join(os.homedir(), '.claude');
@@ -74,6 +74,8 @@ async function init() {
       for (const item of found) {
         if (item.type === 'directory') {
           p.log.message(`  ${item.name}/ (${item.count} ${item.count === 1 ? 'item' : 'items'})`);
+        } else if (item.type === 'group') {
+          p.log.message(`  ${item.name} (${item.items.length} ${item.items.length === 1 ? 'file' : 'files'})`);
         } else {
           p.log.message(`  ${item.name} (${formatSize(item.size)})`);
         }
@@ -97,21 +99,29 @@ async function init() {
         const s = p.spinner();
         s.start('Importing config');
         fs.mkdirSync(configDir, { recursive: true });
-        const topLevel = found.filter(f => f.name !== 'projects').map(f => f.name);
+        const topLevel = found.filter(f => f.name !== 'projects' && f.name !== 'plugins (config)').map(f => f.name);
         importConfig(CLAUDE_DIR, configDir, topLevel);
         if (found.some(f => f.name === 'projects')) {
           importProjects(CLAUDE_DIR, configDir);
+        }
+        if (found.some(f => f.name === 'plugins (config)')) {
+          importPluginConfig(CLAUDE_DIR, configDir);
         }
         s.stop('Config imported');
       } else if (importChoice === 'choose') {
         const selected = await p.multiselect({
           message: 'Select items to import (space to toggle, enter to confirm):',
-          options: found.map(item => ({
-            value: item.name,
-            label: item.type === 'directory'
-              ? `${item.name}/ (${item.count} ${item.count === 1 ? 'item' : 'items'})`
-              : `${item.name} (${formatSize(item.size)})`,
-          })),
+          options: found.map(item => {
+            let label;
+            if (item.type === 'directory') {
+              label = `${item.name}/ (${item.count} ${item.count === 1 ? 'item' : 'items'})`;
+            } else if (item.type === 'group') {
+              label = `${item.name} (${item.items.length} ${item.items.length === 1 ? 'file' : 'files'})`;
+            } else {
+              label = `${item.name} (${formatSize(item.size)})`;
+            }
+            return { value: item.name, label };
+          }),
         });
 
         if (p.isCancel(selected)) {
@@ -122,10 +132,13 @@ async function init() {
         const s = p.spinner();
         s.start('Importing selected config');
         fs.mkdirSync(configDir, { recursive: true });
-        const topLevel = selected.filter(n => n !== 'projects');
+        const topLevel = selected.filter(n => n !== 'projects' && n !== 'plugins (config)');
         importConfig(CLAUDE_DIR, configDir, topLevel);
         if (selected.includes('projects')) {
           importProjects(CLAUDE_DIR, configDir);
+        }
+        if (selected.includes('plugins (config)')) {
+          importPluginConfig(CLAUDE_DIR, configDir);
         }
         s.stop('Config imported');
       } else {
