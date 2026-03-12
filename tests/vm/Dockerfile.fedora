@@ -1,0 +1,9 @@
+FROM fedora:40
+RUN dnf install -y nodejs npm bash && dnf clean all
+RUN useradd -m testuser
+COPY . /opt/claudesync
+RUN chown -R testuser:testuser /opt/claudesync
+USER testuser
+WORKDIR /opt/claudesync
+RUN npm install --ignore-scripts
+CMD ["npm", "test"]
