@@ -1,0 +1,12 @@
+{
+  "bindings": [
+    {
+      "key": "ctrl+s",
+      "command": "submit"
+    },
+    {
+      "key": "ctrl+shift+p",
+      "command": "command_palette"
+    }
+  ]
+}

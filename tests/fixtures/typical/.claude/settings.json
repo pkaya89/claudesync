@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": ["Read", "Glob", "Grep"],
+    "deny": []
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Bash tool used'"
+          }
+        ]
+      }
+    ]
+  }
+}

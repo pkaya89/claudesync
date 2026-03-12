@@ -1,0 +1,3 @@
+- Write tests before implementation
+- Use descriptive test names
+- One assertion per test where practical
