@@ -7,7 +7,9 @@
 
 Add cross-platform testing infrastructure, a documentation caching script, and update the syncable config items to match the current Claude Code directory structure. This lays the groundwork for a future Tauri-based standalone visualisation app.
 
-## 1. Doc-Caching Script
+## 1. ~~Doc-Caching Script~~ (Dropped)
+
+> **Dropped 2026-03-12:** Unnecessary - Claude Code's built-in `/docs` skill provides access to 575+ docs without needing a local cache or pandoc dependency.
 
 ### Purpose
 

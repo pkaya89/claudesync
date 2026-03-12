@@ -1,12 +1,12 @@
-# VM Testing, Doc Caching, and Config Updates - Implementation Plan
+# VM Testing, Config Updates, and Integration Tests - Implementation Plan
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add doc-caching scripts, test fixtures, Docker-based Linux testing, integration tests, and update syncable config items to match current Claude Code directory structure.
+**Goal:** Add test fixtures, Docker-based Linux testing, integration tests, and update syncable config items to match current Claude Code directory structure.
 
-**Architecture:** Six sequential tasks building on each other. Doc-caching first (provides reference for all subsequent work), then gitignore fixes, then IMPORTABLE_ITEMS update, then fixtures, then sandbox helper + integration tests, then Docker setup.
+**Architecture:** Four sequential tasks building on each other. IMPORTABLE_ITEMS update first, then fixtures, then sandbox helper + integration tests, then Docker setup.
 
-**Tech Stack:** Bash (scripts), Node.js 18+ (tests), Docker (VM testing), pandoc (HTML-to-markdown)
+**Tech Stack:** Bash (scripts), Node.js 18+ (tests), Docker (VM testing)
 
 **Spec:** `docs/superpowers/specs/2026-03-11-vm-testing-and-doc-caching-design.md`
 
@@ -18,8 +18,6 @@
 
 | File | Responsibility |
 |------|---------------|
-| `scripts/fetch-docs.sh` | Fetch Claude Code docs, convert to markdown, print changelog warnings |
-| `scripts/check-changelog.sh` | Standalone changelog keyword scanner |
 | `tests/helpers/sandbox.js` | Creates temp dir from fixture, sets HOME, returns cleanup fn |
 | `tests/integration.test.js` | Fixture-based integration tests for import, symlink, backup, status, uninstall |
 | `tests/fixtures/minimal/.claude/CLAUDE.md` | Minimal fixture |
@@ -57,11 +55,10 @@
 
 | File | Changes |
 |------|---------|
-| `.gitignore` | Add `!docs/claude-reference/` negation, add `.last-fetched`/`.last-changelog-check` entries |
 | `cli/import.js` | Update IMPORTABLE_ITEMS (add keybindings.json, rules; remove hooks), add IMPORTABLE_PLUGIN_ITEMS, update detectConfig() and importConfig() |
 | `cli/link.js` | Update SYMLINK_ITEMS (add keybindings.json, rules; remove hooks), add SYMLINK_PLUGIN_ITEMS, update buildSymlinkMap() |
 | `setup.sh` | Update item lists, add plugin config loop |
-| `package.json` | Add npm script entries for test:integration, test:vm, fetch-docs |
+| `package.json` | Add npm script entries for test:integration, test:vm |
 | `tests/import.test.js` | Update assertions for new items |
 | `tests/link.test.js` | Update assertions for new items |
 
@@ -73,247 +70,9 @@
 
 ---
 
-## Chunk 1: Doc-Caching Scripts and Gitignore
+## Chunk 1: IMPORTABLE_ITEMS Update
 
-### Task 1: Update .gitignore for doc-caching
-
-**Files:**
-- Modify: `.gitignore`
-
-- [ ] **Step 1: Update .gitignore**
-
-Add negation pattern for claude-reference docs and specific ignores for timestamp files:
-
-```
-node_modules/
-docs/
-!docs/claude-reference/
-!docs/superpowers/
-docs/claude-reference/.last-fetched
-docs/claude-reference/.last-changelog-check
-.DS_Store
-*.swp
-*.swo
-*~
-```
-
-- [ ] **Step 2: Commit**
-
-```bash
-git add .gitignore
-git commit -m "Update .gitignore to allow docs/claude-reference/ and docs/superpowers/"
-```
-
-### Task 2: Create fetch-docs.sh
-
-**Files:**
-- Create: `scripts/fetch-docs.sh`
-
-- [ ] **Step 1: Create the script**
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# fetch-docs.sh - Fetch Claude Code documentation for offline reference.
-# Requires: curl, pandoc (brew install pandoc / apt install pandoc)
-# Usage: ./scripts/fetch-docs.sh [--force]
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
-OUT_DIR="$REPO_DIR/docs/claude-reference"
-LAST_FETCHED="$OUT_DIR/.last-fetched"
-BASE_URL="https://code.claude.com/docs/en"
-FORCE=false
-
-if [ "${1:-}" = "--force" ]; then
-    FORCE=true
-fi
-
-# Check pandoc is installed
-if ! command -v pandoc &> /dev/null; then
-    echo "Error: pandoc is required. Install with: brew install pandoc (macOS) or apt install pandoc (Linux)"
-    exit 1
-fi
-
-# Skip if fetched within last 24 hours (unless --force)
-if [ "$FORCE" = false ] && [ -f "$LAST_FETCHED" ]; then
-    last_ts=$(cat "$LAST_FETCHED")
-    now_ts=$(date +%s)
-    diff=$(( now_ts - last_ts ))
-    if [ "$diff" -lt 86400 ]; then
-        echo "Docs fetched $(( diff / 3600 ))h ago (< 24h). Use --force to refresh."
-        # Still run changelog check
-        "$SCRIPT_DIR/check-changelog.sh" 2>/dev/null || true
-        exit 0
-    fi
-fi
-
-mkdir -p "$OUT_DIR"
-
-PAGES=(
-    settings
-    memory
-    skills
-    hooks
-    sub-agents
-    plugins
-    plugins-reference
-    permissions
-    setup
-    keybindings
-    changelog
-    how-claude-code-works
-)
-
-echo "Fetching Claude Code documentation..."
-failed=0
-
-for page in "${PAGES[@]}"; do
-    printf "  %-25s" "$page"
-    tmp_file=$(mktemp)
-
-    if curl -sL "$BASE_URL/$page" -o "$tmp_file" 2>/dev/null; then
-        # Convert HTML to markdown with pandoc
-        pandoc -f html -t markdown --wrap=none "$tmp_file" -o "$OUT_DIR/$page.md" 2>/dev/null
-        echo "OK"
-    else
-        echo "FAILED"
-        failed=$((failed + 1))
-    fi
-
-    rm -f "$tmp_file"
-done
-
-# Record timestamp
-date +%s > "$LAST_FETCHED"
-
-echo ""
-if [ "$failed" -gt 0 ]; then
-    echo "Warning: $failed page(s) failed to fetch."
-else
-    echo "All $((${#PAGES[@]})) pages fetched successfully."
-fi
-
-# Run changelog check
-echo ""
-"$SCRIPT_DIR/check-changelog.sh" 2>/dev/null || true
-```
-
-- [ ] **Step 2: Make it executable**
-
-Run: `chmod +x scripts/fetch-docs.sh`
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add scripts/fetch-docs.sh
-git commit -m "Add fetch-docs.sh for caching Claude Code documentation"
-```
-
-### Task 3: Create check-changelog.sh
-
-**Files:**
-- Create: `scripts/check-changelog.sh`
-
-- [ ] **Step 1: Create the script**
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-# check-changelog.sh - Scan cached changelog for changes relevant to claudesync.
-# Reads from docs/claude-reference/changelog.md (run fetch-docs.sh first).
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
-CHANGELOG="$REPO_DIR/docs/claude-reference/changelog.md"
-LAST_CHECK="$REPO_DIR/docs/claude-reference/.last-changelog-check"
-
-if [ ! -f "$CHANGELOG" ]; then
-    echo "No cached changelog found. Run ./scripts/fetch-docs.sh first."
-    exit 1
-fi
-
-# Keywords relevant to claudesync
-KEYWORDS="~/.claude|settings\.json|\.claude/|config directory|symlink|agents/|skills/|commands/|rules/|plugins/|keybindings|breaking|CLAUDE\.md"
-
-echo "Scanning changelog for claudesync-relevant changes..."
-echo ""
-
-# If we have a last-check date, only show entries after it
-if [ -f "$LAST_CHECK" ]; then
-    last_date=$(cat "$LAST_CHECK")
-    echo "(Changes since last check: $last_date)"
-    echo ""
-fi
-
-# Search for matching lines with context
-matches=$(grep -iE "$KEYWORDS" "$CHANGELOG" 2>/dev/null || true)
-
-if [ -z "$matches" ]; then
-    echo "No relevant changes found."
-else
-    echo "Potentially relevant entries:"
-    echo "---"
-    echo "$matches"
-    echo "---"
-    echo ""
-    echo "Review these entries to check if claudesync needs updating."
-fi
-
-# Update last check timestamp
-date +%Y-%m-%d > "$LAST_CHECK"
-```
-
-- [ ] **Step 2: Make it executable**
-
-Run: `chmod +x scripts/check-changelog.sh`
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add scripts/check-changelog.sh
-git commit -m "Add check-changelog.sh for scanning relevant Claude Code changes"
-```
-
-### Task 4: Add npm script entries and run fetch-docs
-
-**Files:**
-- Modify: `package.json`
-
-- [ ] **Step 1: Add npm scripts**
-
-In `package.json`, update the `"scripts"` block:
-
-```json
-"scripts": {
-    "test": "node --test tests/*.test.js",
-    "test:integration": "node --test tests/integration.test.js",
-    "test:vm": "./tests/vm/run-all.sh",
-    "test:vm:ubuntu": "./tests/vm/run-single.sh ubuntu",
-    "fetch-docs": "./scripts/fetch-docs.sh",
-    "release": "npm publish --access public --auth-type=web"
-}
-```
-
-- [ ] **Step 2: Run fetch-docs to populate the cache**
-
-Run: `./scripts/fetch-docs.sh --force`
-Expected: 12 pages fetched, docs appear in `docs/claude-reference/`
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add package.json docs/claude-reference/*.md
-git commit -m "Add npm script entries and initial doc cache"
-```
-
----
-
-## Chunk 2: IMPORTABLE_ITEMS Update
-
-### Task 5: Update cli/import.js - item lists and detectConfig
+### Task 1: Update cli/import.js - item lists and detectConfig
 
 **Files:**
 - Modify: `cli/import.js:4-11` (IMPORTABLE_ITEMS)
@@ -437,7 +196,7 @@ git add cli/import.js tests/import.test.js
 git commit -m "Update IMPORTABLE_ITEMS: add keybindings.json, rules, plugins; remove hooks"
 ```
 
-### Task 6: Update cli/link.js - symlink items and buildSymlinkMap
+### Task 2: Update cli/link.js - symlink items and buildSymlinkMap
 
 **Files:**
 - Modify: `cli/link.js:5-12` (SYMLINK_ITEMS)
@@ -521,7 +280,7 @@ git add cli/link.js tests/link.test.js
 git commit -m "Update SYMLINK_ITEMS: add keybindings.json, rules, plugins; remove hooks"
 ```
 
-### Task 7: Update setup.sh
+### Task 3: Update setup.sh
 
 **Files:**
 - Modify: `setup.sh:66` (import items array)
@@ -580,7 +339,7 @@ git add setup.sh
 git commit -m "Update setup.sh: add keybindings.json, rules, plugins; remove hooks"
 ```
 
-### Task 8: Update cli/index.js to handle plugin imports
+### Task 4: Update cli/index.js to handle plugin imports
 
 **Files:**
 - Modify: `cli/index.js:7` (import statement)
@@ -655,9 +414,9 @@ git commit -m "Wire up plugin config import in CLI init flow"
 
 ---
 
-## Chunk 3: Test Fixtures
+## Chunk 2: Test Fixtures
 
-### Task 9: Create minimal fixture
+### Task 5: Create minimal fixture
 
 **Files:**
 - Create: `tests/fixtures/minimal/.claude/CLAUDE.md`
@@ -677,7 +436,7 @@ git add tests/fixtures/minimal/
 git commit -m "Add minimal test fixture"
 ```
 
-### Task 10: Create typical fixture
+### Task 6: Create typical fixture
 
 **Files:**
 - Create: `tests/fixtures/typical/.claude/CLAUDE.md`
@@ -740,7 +499,7 @@ git add tests/fixtures/typical/
 git commit -m "Add typical test fixture"
 ```
 
-### Task 11: Create full fixture
+### Task 7: Create full fixture
 
 **Files:**
 - Create: all files listed under `tests/fixtures/full/` in the file structure table above
@@ -890,7 +649,7 @@ git add tests/fixtures/full/
 git commit -m "Add full test fixture with all syncable items"
 ```
 
-### Task 12: Create edge case fixtures
+### Task 8: Create edge case fixtures
 
 **Files:**
 - Create: `tests/fixtures/edge-broken-symlinks/.claude/CLAUDE.md`
@@ -955,9 +714,9 @@ git commit -m "Add edge case test fixtures"
 
 ---
 
-## Chunk 4: Sandbox Helper and Integration Tests
+## Chunk 3: Sandbox Helper and Integration Tests
 
-### Task 13: Create sandbox helper
+### Task 9: Create sandbox helper
 
 **Files:**
 - Create: `tests/helpers/sandbox.js`
@@ -1037,7 +796,7 @@ git add tests/helpers/sandbox.js
 git commit -m "Add sandbox test helper for fixture-based testing"
 ```
 
-### Task 14: Create integration tests
+### Task 10: Create integration tests
 
 **Files:**
 - Create: `tests/integration.test.js`
@@ -1387,9 +1146,9 @@ git commit -m "Replace e2e tests with fixture-based integration tests"
 
 ---
 
-## Chunk 5: Docker Setup
+## Chunk 4: Docker Setup
 
-### Task 15: Create .dockerignore and Dockerfiles
+### Task 11: Create .dockerignore and Dockerfiles
 
 **Files:**
 - Create: `.dockerignore`
@@ -1457,7 +1216,7 @@ git add .dockerignore tests/vm/Dockerfile.*
 git commit -m "Add .dockerignore and Dockerfiles for Ubuntu, Fedora, and Alpine"
 ```
 
-### Task 16: Create run-single.sh
+### Task 12: Create run-single.sh
 
 **Files:**
 - Create: `tests/vm/run-single.sh`
@@ -1503,7 +1262,7 @@ git add tests/vm/run-single.sh
 git commit -m "Add run-single.sh for testing in individual Docker containers"
 ```
 
-### Task 17: Create run-all.sh
+### Task 13: Create run-all.sh
 
 **Files:**
 - Create: `tests/vm/run-all.sh`
@@ -1581,7 +1340,7 @@ git add tests/vm/run-all.sh
 git commit -m "Add run-all.sh for cross-distro Docker testing"
 ```
 
-### Task 18: Final verification
+### Task 14: Final verification
 
 - [ ] **Step 1: Run full local test suite**
 
